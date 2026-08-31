@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Towards Understanding Humanoid Control through Network Weight Analysis</title>
+<meta name="description" content="We study humanoid control policies through the lens of their weight space, generating deployable network weights with latent diffusion and analysing the structure those weights encode.">
+<meta property="og:title" content="Towards Understanding Humanoid Control through Network Weight Analysis">
+<meta property="og:description" content="Latent diffusion over policy weights, deployed zero-shot on a Unitree G1.">
+<meta property="og:image" content="assets/fig/og_cover.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" as="image" href="assets/fig/hero_poster.webp">
+<style>
+:root{
+  --surface:#fcfcfb; --plane:#f9f9f7;
+  --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --good:#006300;
+  --maxw:1000px; --wide:1210px; --pad:30px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.65;
+  -webkit-font-smoothing:antialiased}
+img{max-width:100%;height:auto;display:block}
+
+/* ── nav ───────────────────────────────────────────── */
+.nav{position:sticky;top:0;z-index:50;background:rgba(249,249,247,.9);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--grid)}
+.nav .in{max-width:var(--wide);margin:0 auto;padding:11px var(--pad);display:flex;gap:20px;
+  font-size:13.5px;align-items:center;overflow-x:auto;scrollbar-width:none}
+.nav .in::-webkit-scrollbar{display:none}
+.nav a{color:var(--ink2);text-decoration:none;white-space:nowrap}
+.nav a:hover{color:var(--ink)}
+.nav .tag{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+
+/* ── hero ──────────────────────────────────────────── */
+.hero{text-align:center;padding:56px var(--pad) 12px;max-width:var(--wide);margin:0 auto}
+h1{font-size:clamp(27px,4vw,40px);line-height:1.18;letter-spacing:-.02em;
+  margin:0 auto 20px;max-width:16em;font-weight:650}
+.authors,.aff,.venue{max-width:none}
+.authors{font-size:16.5px;margin:0 0 4px;color:var(--ink)}
+.aff{font-size:14.5px;color:var(--ink2);margin:0 0 2px}
+.venue{font-size:14px;color:var(--muted);margin:0 0 26px}
+.btns{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-bottom:8px}
+.btn{display:inline-flex;align-items:center;gap:7px;background:#1a1a19;color:#fff;
+  text-decoration:none;padding:9px 19px;border-radius:999px;font-size:14px;
+  transition:background .15s}
+.btn:hover{background:#000}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--axis)}
+.btn.ghost:hover{background:#f0efec}
+.btn svg{width:15px;height:15px;fill:currentColor}
+
+/* ── layout ────────────────────────────────────────── */
+section{max-width:var(--wide);margin:0 auto;padding:44px var(--pad)}
+section.wide{max-width:var(--wide)}  /* same measure as everything else */
+h2{font-size:24px;letter-spacing:-.015em;margin:0 0 26px;font-weight:640;text-align:center}
+.dek{color:var(--ink2);font-size:16px;margin:0 0 17px;max-width:70ch;text-align:left}
+h3{font-size:16px;margin:26px 0 8px;font-weight:620;text-align:left}
+/* Subsections get a short left rule, deliberately unlike the full-width <hr class="rule">
+   that separates Method / Experiments / Weight Space Analysis. */
+#results h3:not(:first-of-type),
+#analysis h3:not(:first-of-type){margin-top:46px}
+#results h3:not(:first-of-type)::before,
+#analysis h3:not(:first-of-type)::before{content:"";display:block;width:48px;height:2px;
+  background:#c3c2b7;margin:0 0 22px}
+p{font-size:16px;color:var(--ink2);margin:0 0 17px;max-width:70ch}
+.abs{font-size:16px;color:var(--ink2);max-width:74ch;margin:0 auto;text-align:center}
+hr{border:0;border-top:1px solid var(--grid);margin:0;max-width:calc(var(--wide) - 2*var(--pad))}
+.rule{max-width:calc(var(--wide) - 2*var(--pad));margin:0 auto}
+figure{margin:0}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:12px;
+  overflow:hidden}
+figcaption{font-size:13.5px;color:var(--ink2);margin-top:11px;line-height:1.55;max-width:78ch}
+figcaption + p, figcaption + .dek{margin-top:17px}   /* prose after a caption needs the same air as between paragraphs */
+figcaption.mid{margin-left:auto;margin-right:auto;text-align:left;max-width:70ch}
+/* Experiments prose runs at the same measure as Method */
+#results .dek,#results p,#results figcaption,
+#analysis .dek,#analysis p,#analysis figcaption{max-width:none}
+.lede{max-width:none;margin:0 auto 30px}
+#method{max-width:var(--wide)}
+#method figcaption.mid{max-width:none}
+.lede p{max-width:none;text-align:left;margin:0 0 17px}
+.lede p:last-child{margin-bottom:0}
+.lede b,.dek b{color:var(--ink);font-weight:640}
+h2.mid{text-align:center}
+figcaption b{color:var(--ink);font-weight:620}
+.pad{padding:16px}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}
+code{background:#f0efec;padding:1px 5px;border-radius:4px}
+
+/* ── media ─────────────────────────────────────────── */
+.teaser{max-width:var(--wide);margin:26px auto 0;padding:0 var(--pad)}
+video{width:100%;display:block;background:#eceae6}
+.player{position:relative;line-height:0}
+.player video{aspect-ratio:16/9}
+.playbtn{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;cursor:pointer;
+  background:transparent;display:flex;align-items:center;justify-content:center;
+  transition:opacity .25s ease}
+.playbtn::before{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(11,11,11,.05),rgba(11,11,11,.22))}
+.playbtn .pill{position:relative;display:inline-flex;align-items:center;gap:9px;
+  background:rgba(252,252,251,.95);color:var(--ink);border-radius:999px;
+  padding:11px 20px 11px 16px;font:inherit;font-size:14.5px;font-weight:620;line-height:1;
+  box-shadow:0 2px 16px rgba(11,11,11,.24);transition:transform .18s ease}
+.playbtn:hover .pill{transform:scale(1.035)}
+.playbtn svg{width:18px;height:18px;fill:currentColor;flex:none}
+.playbtn:focus-visible{outline:3px solid var(--s1);outline-offset:-3px}
+.player.playing .playbtn{opacity:0;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.playbtn,.playbtn .pill{transition:none}}
+.vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+/* keep the three clips side by side on anything but a phone */
+@media(max-width:560px){.vgrid{grid-template-columns:1fr}}
+.vgrid .lbl{display:flex;justify-content:space-between;align-items:center;
+  padding:10px 14px;font-size:13.5px;border-top:1px solid var(--ring)}
+.vgrid .lbl b{font-weight:620}
+.vgrid .lbl span{color:var(--muted);font-size:12.5px}
+.needs{position:absolute;inset:auto 8px 8px auto;background:rgba(11,11,11,.72);color:#fff;
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:5px}
+.rel{position:relative}
+
+/* ── tables ────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--surface)}
+th,td{padding:9px 12px;border-bottom:1px solid var(--grid);text-align:left}
+th{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+  font-weight:620;white-space:nowrap}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.hi td{font-weight:640;color:var(--ink)}
+.tw{border:1px solid var(--ring);border-radius:12px;overflow-x:auto}
+.tw table{min-width:640px}
+.pm{color:var(--muted);font-size:.86em}
+.tnote{font-size:12.5px;color:var(--muted);margin-top:9px}
+
+/* ── controls ──────────────────────────────────────── */
+.ctrls{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-end;margin:0 0 16px;
+  padding:14px 16px;background:var(--surface);border:1px solid var(--ring);border-radius:12px}
+.grp{display:flex;flex-direction:column;gap:6px}
+.grp>label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  font-weight:620}
+.seg{display:flex;background:#f0efec;border-radius:8px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;padding:6px 13px;border-radius:6px;
+  font:inherit;font-size:13.5px;color:var(--ink2);cursor:pointer;white-space:nowrap;
+  transition:.12s}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;
+  box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.hintbar{font-size:12.5px;color:var(--muted);margin-left:auto;align-self:center}
+
+/* ── explorer ──────────────────────────────────────── */
+.expl{display:block}
+.expl .stage{min-height:260px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:22px;align-items:start}
+@media(max-width:860px){.split{grid-template-columns:1fr}}
+.stage{background:var(--surface);border:1px solid var(--ring);border-radius:12px;
+  padding:14px;display:flex;align-items:center;justify-content:center;
+  cursor:zoom-in;position:relative}
+.stage img{max-height:none;width:100%}  /* vector figures carry a small intrinsic size; make them fill the stage like the rasters */
+.stage.zoom{display:block;overflow:auto;cursor:zoom-out}
+.stage.zoom img{max-width:none;width:auto}
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media(max-width:860px){.trio{grid-template-columns:1fr}}
+.trio .stage{min-height:0;padding:10px}
+.zoomtip{position:absolute;right:16px;bottom:16px;background:rgba(11,11,11,.7);color:#fff;
+  font-size:11px;letter-spacing:.04em;padding:4px 9px;border-radius:6px;pointer-events:none;
+  opacity:0;transition:opacity .15s}
+.stage:hover .zoomtip{opacity:1}
+.stage.zoom .zoomtip{display:none}
+.readout{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:16px;
+  margin-top:14px}
+.readout h4{margin:0 0 4px;font-size:15px;font-weight:620}
+.readout .src{font-size:12px;color:var(--muted);margin:0 0 12px}
+.readout p{font-size:16px;line-height:1.65;margin:0 0 17px;color:var(--ink2);max-width:none}
+
+/* ── chart ─────────────────────────────────────────── */
+.chartwrap{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:18px}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--ink2);margin-bottom:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;
+  vertical-align:-1px}
+.panels{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media(max-width:860px){.panels{grid-template-columns:1fr}}
+.panel .cap{font-size:13px;font-weight:620;margin:0 0 2px}
+.panel .sub{font-size:12px;color:var(--muted);margin:0 0 4px}
+.tip{position:fixed;pointer-events:none;background:#1a1a19;color:#fff;font-size:12px;
+  padding:7px 10px;border-radius:7px;opacity:0;transition:opacity .1s;z-index:99;
+  line-height:1.45;white-space:nowrap}
+.tip b{font-weight:620}
+.toggleview{background:none;border:1px solid var(--axis);border-radius:7px;font:inherit;
+  font-size:12.5px;color:var(--ink2);padding:5px 11px;cursor:pointer}
+.toggleview:hover{background:#f0efec}
+
+/* ── details ───────────────────────────────────────── */
+details{background:var(--surface);border:1px solid var(--ring);border-radius:12px;
+  padding:0 16px;margin-top:14px}
+summary{cursor:pointer;padding:13px 0;font-size:14.5px;font-weight:600;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"›";display:inline-block;margin-right:9px;transition:transform .15s;
+  color:var(--muted)}
+details[open] summary::before{transform:rotate(90deg)}
+details .body{padding-bottom:16px}
+
+pre{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:16px;
+  font-size:12.8px;overflow:auto;color:var(--ink2);line-height:1.6}
+footer{text-align:center;font-size:12.5px;color:var(--muted);padding:34px 24px 56px;
+  border-top:1px solid var(--grid);margin-top:24px}
+footer a{color:var(--ink2)}
+.anon{display:inline-block;background:#f0efec;border:1px solid var(--ring);border-radius:6px;
+  padding:2px 9px;font-size:12.5px;color:var(--ink2)}
+</style>
+</head>
+<body>
+
+<nav class="nav"><div class="in">
+  <a href="#method">Method</a>
+  <a href="#results">Experiments</a>
+  <a href="#analysis">Weight Space Analysis</a>
+  <a href="#bibtex">BibTeX</a>
+  <span class="tag">Under review · double-anonymous</span>
+</div></nav>
+
+<header class="hero">
+  <h1>Towards Understanding Humanoid Control through Network Weight Analysis</h1>
+  <p class="authors"><span class="anon">Anonymous Authors</span></p>
+  <p class="aff">Paper under double-anonymous review</p>
+  <p class="venue">ICRA 2027 submission</p>
+  <div class="btns">
+    <a class="btn" href="#"><svg viewBox="0 0 16 16"><path d="M9 1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5L9 1zm0 1.5L11.5 5H9V2.5z"/></svg>arXiv</a>
+    <a class="btn" href="#">Code</a>
+    <a class="btn ghost" href="#bibtex">BibTeX</a>
+  </div>
+</header>
+
+<div class="teaser">
+  <figure class="card">
+    <div class="player" id="player">
+      <video id="teaser" controls playsinline preload="metadata"
+             poster="assets/fig/hero_poster.webp">
+        <source src="assets/video/final.mp4" type="video/mp4">
+      </video>
+      <button class="playbtn" id="playbtn" type="button" aria-label="Play the demo video">
+        <span class="pill">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.4v13.2L19 12z"/></svg>
+          Watch the demo · 28 s
+        </span>
+      </button>
+    </div>
+  </figure>
+  <figcaption class="mid"><b>Policy networks generated by a diffusion model, running on real hardware.</b>
+    A latent diffusion model samples the weights of a three-layer MLP policy; the sampled
+    network is deployed zero-shot on a Unitree G1 with no fine-tuning. In order: walking,
+    dancing, spin kick.</figcaption>
+</div>
+
+<section>
+  <h2 class="mid">Abstract</h2>
+  <p class="abs">Recent advances in robot learning have driven rapid progress in humanoid control,
+  enabling increasingly agile behaviors in the real world. Despite this progress, little is known
+  about what these policies actually capture in their weights. Existing weight space analysis of
+  neural networks has focused on different domains or low-dimensional tasks, leaving the
+  understanding of humanoid policies incomplete. In this work, we study humanoid control policies
+  through the lens of their weight space, asking whether their underlying structure can be both
+  modeled generatively and interpreted analytically. We adopt a latent diffusion framework that
+  couples a linear autoencoder with a Diffusion Transformer. The autoencoder compresses actor
+  network parameters into a compact latent space, and the Diffusion Transformer models the
+  distribution of these latents. Trained on reinforcement learning collected networks for the
+  Unitree G1 robot, our approach generates networks that perform various motions in the real world,
+  including walking, dancing, and spin kick. Beyond generation, we conduct a systematic analysis of
+  the network weight space and identify a structural principle in the first-layer weights that
+  consistently reflects the robot's kinematic prior. In addition, we find that different training
+  approaches, namely reinforcement learning (RL) and imitation learning (IL), lead to distinct
+  weight space manifolds. Together, these results advance both the generation and understanding of
+  humanoid policy weights.</p>
+</section>
+
+<hr class="rule">
+
+<!-- ═══ METHOD ═══ -->
+<section id="method">
+  <h2 class="mid">Method</h2>
+  <div class="lede">
+    <p><b>What we generate? The network itself.</b> Diffusion models in robotics normally sample
+    what the robot should <em>do</em>: an action chunk, a trajectory, a plan. Here the generative
+    target moves one level up: the model samples the <b>weights and biases of a humanoid control
+    policy</b>. One sample from the diffusion model is a complete controller, a more fundamental
+    object than a diffusion policy produces. Once the weights are decoded the diffusion model is
+    out of the loop entirely: what runs on the robot is a plain policy network at full control
+    rate.</p>
+
+    <p>For training data, we run 750 RL runs from scratch with distinct random seeds, and collect
+    eight network weights after convergence, adding up to <b>6,000 networks per motion</b>. Each
+    network is a three-layer MLP, hidden dimensions (128, 128), ELU activations, mapping a 99-d
+    observation for walking or 154-d for the tracking motions to 29 joint targets, so
+    <b>roughly 30k–40k parameters</b> each.</p>
+
+    <p><b>How do we diffuse over 30&ndash;40k dimensions?</b> Fortunately, we do not have to.
+    Trained network weights are highly redundant: their effective dimensionality lies far below the
+    nominal parameter count. We exploit this with a linear autoencoder that compresses the flattened
+    weights and biases into a <b>2,048-dimensional latent</b>, and train the diffusion model in that
+    latent space rather than over the raw parameters.</p>
+  </div>
+  <figure class="card pad">
+    <img src="assets/fig/method.webp" alt="Method overview: data collection, linear autoencoder, diffusion transformer" loading="lazy">
+  </figure>
+  <figcaption class="mid"><b>Method overview.</b> (a) We collect actor weights from 750 training
+  runs with random seeds and retain eight post-convergence networks from each run. Each network is a
+  three-layer MLP. (b) The cluster-wise linear autoencoder is implemented using single-layer encoders
+  and decoders. (c) A diffusion transformer is trained with <em>x</em>-pred loss to model the latent
+  distribution. During inference, the model generates novel network weights that can be deployed in
+  the real world.</figcaption>
+
+</section>
+
+<hr class="rule">
+
+<!-- ═══ RESULTS ═══ -->
+<section id="results" class="wide">
+  <h2>Experiments</h2>
+
+  <h3>Real-world deployment</h3>
+  <p class="dek">Every clip below is a network sampled from the diffusion model and run on the
+  physical G1 without fine-tuning.</p>
+
+  <div class="vgrid" id="video">
+    <figure class="card">
+      <div class="rel">
+        <video muted loop playsinline preload="none" data-lazy poster="assets/fig/poster_walking.webp">
+          <source src="assets/video/walking.mp4" type="video/mp4"></video>
+      </div>
+      <div class="lbl"><b>Walking</b><span>velocity-command locomotion</span></div>
+    </figure>
+    <figure class="card">
+      <div class="rel">
+        <video muted loop playsinline preload="none" data-lazy poster="assets/fig/poster_dancing.webp">
+          <source src="assets/video/dancing.mp4" type="video/mp4"></video>
+      </div>
+      <div class="lbl"><b>Dancing</b><span>rhythmic whole-body tracking</span></div>
+    </figure>
+    <figure class="card">
+      <div class="rel">
+        <video muted loop playsinline preload="none" data-lazy poster="assets/fig/poster_spinkick.webp">
+          <source src="assets/video/spinkick.mp4" type="video/mp4"></video>
+      </div>
+      <div class="lbl"><b>Spin kick</b><span>highly dynamic kicking motion</span></div>
+    </figure>
+  </div>
+
+
+  <h3 id="quality">Performance evaluation of generated networks</h3>
+  <p class="dek">Success rate (Succ) and tracking error (TE) over 100 generated policy networks.
+  DiT (best 90%) attains performance commensurate with the dataset, indicating that fewer than 10%
+  of generated samples exhibit performance collapse.</p>
+  <div class="tw"><table>
+    <tr>
+      <th rowspan="2" style="vertical-align:bottom">Motion</th>
+      <th class="n" colspan="2">Dataset</th>
+      <th class="n" colspan="2">DiT (mean)</th>
+      <th class="n" colspan="2">DiT (best 90%)</th>
+      <th class="n" colspan="2">DiT (best)</th>
+    </tr>
+    <tr>
+      <th class="n">Succ &uarr;</th><th class="n">TE &darr;</th>
+      <th class="n">Succ &uarr;</th><th class="n">TE &darr;</th>
+      <th class="n">Succ &uarr;</th><th class="n">TE &darr;</th>
+      <th class="n">Succ &uarr;</th><th class="n">TE &darr;</th>
+    </tr>
+    <tr><td>Walking</td><td class="n">0.999 <span class="pm">± 0.001</span></td><td class="n">0.162 <span class="pm">± 0.003</span></td><td class="n">0.993 <span class="pm">± 0.023</span></td><td class="n">0.191 <span class="pm">± 0.020</span></td><td class="n">0.997 <span class="pm">± 0.003</span></td><td class="n">0.186 <span class="pm">± 0.013</span></td><td class="n">1.000</td><td class="n">0.161</td></tr>
+    <tr><td>Dancing</td><td class="n">0.998 <span class="pm">± 0.004</span></td><td class="n">0.037 <span class="pm">± 0.001</span></td><td class="n">0.941 <span class="pm">± 0.213</span></td><td class="n">0.042 <span class="pm">± 0.007</span></td><td class="n">0.996 <span class="pm">± 0.006</span></td><td class="n">0.040 <span class="pm">± 0.003</span></td><td class="n">1.000</td><td class="n">0.036</td></tr>
+    <tr><td>Spin kick</td><td class="n">0.997 <span class="pm">± 0.004</span></td><td class="n">0.046 <span class="pm">± 0.002</span></td><td class="n">0.943 <span class="pm">± 0.289</span></td><td class="n">0.053 <span class="pm">± 0.007</span></td><td class="n">0.993 <span class="pm">± 0.009</span></td><td class="n">0.051 <span class="pm">± 0.004</span></td><td class="n">1.000</td><td class="n">0.044</td></tr>
+  </table></div>
+
+  <details>
+    <summary>Ablation: transformer embedding dimension</summary>
+    <div class="body">
+      <div class="tw"><table>
+        <tr>
+          <th rowspan="2" style="vertical-align:bottom">Motion</th>
+          <th class="n" colspan="2">embedding = 512</th>
+          <th class="n" colspan="2">embedding = 768</th>
+          <th class="n" colspan="2">embedding = 1024 (ours)</th>
+        </tr>
+        <tr>
+          <th class="n">Prog &uarr;</th><th class="n">TE &darr;</th>
+          <th class="n">Prog &uarr;</th><th class="n">TE &darr;</th>
+          <th class="n">Prog &uarr;</th><th class="n">TE &darr;</th>
+        </tr>
+        <tr><td>Walking</td><td class="n">0.643 <span class="pm">± 0.373</span></td><td class="n">0.513 <span class="pm">± 0.284</span></td><td class="n">0.890 <span class="pm">± 0.253</span></td><td class="n">0.298 <span class="pm">± 0.139</span></td><td class="n">0.997 <span class="pm">± 0.010</span></td><td class="n">0.191 <span class="pm">± 0.020</span></td></tr>
+        <tr><td>Dancing</td><td class="n">0.536 <span class="pm">± 0.231</span></td><td class="n">0.076 <span class="pm">± 0.012</span></td><td class="n">0.651 <span class="pm">± 0.243</span></td><td class="n">0.071 <span class="pm">± 0.012</span></td><td class="n">0.965 <span class="pm">± 0.154</span></td><td class="n">0.042 <span class="pm">± 0.007</span></td></tr>
+        <tr><td>Spin kick</td><td class="n">0.296 <span class="pm">± 0.122</span></td><td class="n">0.082 <span class="pm">± 0.008</span></td><td class="n">0.873 <span class="pm">± 0.198</span></td><td class="n">0.067 <span class="pm">± 0.010</span></td><td class="n">0.969 <span class="pm">± 0.136</span></td><td class="n">0.053 <span class="pm">± 0.007</span></td></tr>
+      </table></div>
+      <p class="tnote">All results are reported as mean &plusmn; std over diffusion samples. Prog
+      is task progress in the range [0, 1]: for motion tracking, it is the fraction of reference
+      motion frames completed; for walking, it denotes the fraction of the max episode duration
+      (20 s) survived. TE denotes tracking error: MPKPE (m) for motion tracking, and mean linear
+      velocity command error (m/s) for walking.</p>
+    </div>
+  </details>
+
+  <h3 id="tsne-vis">t-SNE visualization</h3>
+  <p class="dek">Training and generated weights embedded in a shared t-SNE space, 100
+  samples each. For all three motions the generated weights fall within the support of the
+  training distribution, indicating that the two sets are drawn from the same
+  distribution.</p>
+  <div class="vgrid">
+    <figure class="card">
+      <img src="assets/fig/tsne_walking.webp" alt="t-SNE of training and generated weights, Walking" loading="lazy">
+      <div class="lbl"><b>Walking</b><span>n = 100 each</span></div>
+    </figure>
+    <figure class="card">
+      <img src="assets/fig/tsne_dancing.webp" alt="t-SNE of training and generated weights, Dancing" loading="lazy">
+      <div class="lbl"><b>Dancing</b><span>n = 100 each</span></div>
+    </figure>
+    <figure class="card">
+      <img src="assets/fig/tsne_spinkick.webp" alt="t-SNE of training and generated weights, Spin kick" loading="lazy">
+      <div class="lbl"><b>Spin kick</b><span>n = 100 each</span></div>
+    </figure>
+  </div>
+
+  <h3 id="generalization">Memorization or generalization? Not memorization but local generalization.</h3>
+  <p class="dek">If the model merely memorized the training set, a generated network should
+  perform no better than a training network perturbed to the same distance in weight space. We
+  therefore measure each generated network's distance to its nearest training network, convert this
+  distance to an equivalent noise level σ, and perturb training networks accordingly. At matched
+  distances, generated networks consistently outperform the noise-perturbed baselines across all
+  motions. This indicates that diffusion-generated deviations are structured rather than arbitrary,
+  preferentially following performance-preserving directions in weight space. We refer to this
+  behavior as local generalization. Consistently, the rapid performance degradation under increasing
+  random perturbations shows that comparable displacement alone is insufficient to preserve
+  functionality.</p>
+
+
+
+  <div class="chartwrap">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div class="legend">
+        <span><i style="background:var(--s2)"></i>Noise-perturbed training network</span>
+        <span><i style="background:var(--s1)"></i>Diffusion-generated (ours)</span>
+      </div>
+      <button class="toggleview" id="tblbtn" style="margin-left:auto">Show table</button>
+    </div>
+    <div class="panels" id="panels"></div>
+    <div id="tblview" hidden style="margin-top:16px"></div>
+  </div>
+  <figcaption style="margin-top:12px"><b>Success rate against distance from the training set.</b>
+  The orange line is a training network perturbed by Gaussian noise at increasing σ; the dashed
+  guide marks the matched distance, where the blue point is the diffusion-generated
+  network.</figcaption>
+</section>
+
+<hr class="rule">
+
+<!-- ═══ WEIGHT SPACE ANALYSIS ═══ -->
+<section id="analysis" class="wide">
+  <h2>Weight Space Analysis</h2>
+
+  <p class="dek">Most studies on RL- or IL-based humanoid and quadruped control primarily
+  evaluate a policy through its reward, tracking error or other behavioral metrics. In this work, we
+  instead examine control policies from <b>a complementary perspective: their neural network
+  weight space</b>. Our diffusion generation results first suggest that this space exhibits
+  learnable structure,
+  motivating a further question: what information is encoded in the weight space, and to what extent
+  is it interpretable? Although the following analysis is preliminary, we view it as a first step
+  toward understanding the internal organization of neural control networks and toward connecting
+  weight-space structure with their learned behaviors.</p>
+
+  <p class="dek">A natural starting point is to directly <b>visualize</b> the weight space structure. Since
+  the control networks considered here are compact multi-layer perceptrons, we visualize their
+  weight matrices and biases as heatmaps across three representative motions of increasing
+  complexity, examining both the first layer and the full network. We further compare networks
+  trained under RL and IL, as well as RL networks trained with and without domain randomization, to
+  identify weight space patterns associated with different training paradigms and conditions. To
+  make weight space magnitudes comparable across observation dimensions, observation normalization
+  is applied in the RL training used for this analysis, reducing confounding effects caused by
+  differences in input scale.</p>
+
+  <h3 id="explorer">Weight space explorer</h3>
+  <p class="dek">We offer comprehensive visualization of the first layer or all three, RL or IL,
+  with or without domain randomization, one motion or another. Feel free to explore on your own and
+  find the differences and connections.</p>
+
+  <p class="dek">It's not difficult to find that the first-layer weights exhibit certain structural
+  patterns, whereas the second and third layers appear relatively less organized. We hypothesize
+  that the structure observed in the first layer may be related to the explicit semantic meaning of
+  the input dimensions, making it more amenable to preliminary analysis. We therefore focus
+  primarily on the <b>first-layer</b> in the following sections.</p>
+
+  <div class="ctrls">
+    <div class="grp"><label>Motion</label><div class="seg" id="segMotion">
+      <button data-v="walking" aria-pressed="true">Walking</button>
+      <button data-v="dancing" aria-pressed="false">Dancing</button>
+      <button data-v="spinkick" aria-pressed="false">Spin kick</button>
+    </div></div>
+    <div class="grp"><label>Layers</label><div class="seg" id="segScope">
+      <button data-v="L1" aria-pressed="true">First layer</button>
+      <button data-v="L3" aria-pressed="false">All three</button>
+    </div></div>
+    <div class="grp"><label>Compare</label><div class="seg" id="segCmp">
+      <button data-v="rl" aria-pressed="true">RL only</button>
+      <button data-v="rlil" aria-pressed="false">RL vs IL</button>
+      <button data-v="dr" aria-pressed="false">DR vs no-DR</button>
+    </div></div>
+    <span class="hintbar">15 views · ← → to step through motions</span>
+  </div>
+
+  <div class="expl">
+    <figure class="stage"><img id="explImg" src="assets/fig/w_walking_L1_rl.webp" alt=""></figure>
+    <aside class="readout">
+      <h4 id="roTitle"></h4>
+      <p id="roBody"></p>
+    </aside>
+  </div>
+
+
+
+  <h3 id="prior">Kinematic prior in the first-layer</h3>
+  <p class="dek">For those RL trained networks, we average the absolute first-layer weight over the
+  128 hidden nodes and 50 seeds to obtain a per-joint importance profile. The profile barely moves
+  between walking, dancing and spin kick. The network spends its first layer describing the
+  <em>robot</em>, not the motion.</p>
+  <p class="dek">Observation shows a structural principle in the first-layer
+  weights: the network assigns the greatest importance to the waist region and to joint indices 1
+  and 7, corresponding to the left and right hip pitch joints, which collectively define the pelvic
+  region. These are followed by the remaining joints in legs and then the arms. We therefore
+  hypothesize that the first-layer weight matrices capture a <b>kinematic prior</b> rather than
+  motion-specific knowledge. This interpretation aligns with findings in human motor control and
+  biomechanics showing that the trunk primarily provides postural stability, while the limbs are
+  responsible for mobility and motion execution.</p>
+
+  <figure class="card pad">
+    <img src="assets/fig/jointwise.webp" alt="Joint-wise normalised weight magnitude across motions" loading="lazy">
+  </figure>
+  <figcaption>Normalized per-joint average |W| for the <code>joint_pos</code> (top) and
+  <code>joint_vel</code> (bottom) input blocks, across 29 actuated joints ordered legs (12),
+  waist (3), arms (14).</figcaption>
+
+  <details>
+    <summary>The 29 actuated joints of the input <code>joint_pos</code>, <code>joint_vel</code> and <code>last_action</code></summary>
+    <div class="body">
+      <div class="tw"><table id="joints"></table></div>
+      <p class="tnote">Index <em>k</em> is the position in the
+      <code>joint_pos</code> / <code>joint_vel</code> / <code>last_action</code> input blocks and in
+      the 29-d action output.</p>
+    </div>
+  </details>
+
+  <h3 id="rlil">RL and IL weight comparison</h3>
+  <p class="dek">The emergence of a kinematic prior raises a natural question: is that prior
+  intrinsic to the learned motion, or does it depend on how the network is trained? We therefore
+  analyze networks trained by <b>imitation learning (IL)</b> performing the same motions.</p>
+
+  <p class="dek">For each motion we distill an IL network from a pre-trained RL network. We roll
+  out the RL network in parallel environments to collect a buffer and distill the IL network by
+  offline regression, achieving a <b>functionally equivalent</b> network obtained through an
+  entirely different optimization process.</p>
+
+
+  <div class="trio">
+    <figure class="stage">
+      <img src="assets/fig/prior_rlil_walking.webp" loading="lazy"
+           alt="Walking: normalized per-joint weight magnitude, RL teachers vs IL students">
+    </figure>
+    <figure class="stage">
+      <img src="assets/fig/prior_rlil_dancing.webp" loading="lazy"
+           alt="Dancing: normalized per-joint weight magnitude, RL teachers vs IL students">
+    </figure>
+    <figure class="stage">
+      <img src="assets/fig/prior_rlil_spinkick.webp" loading="lazy"
+           alt="Spin kick: normalized per-joint weight magnitude, RL teachers vs IL students">
+    </figure>
+  </div>
+  <figcaption>Normalized per-joint average |W| by mean for each motion, averaged over 50 RL teachers and
+  their 50 distilled IL students. The solid and dashed curves largely overlap, indicating the
+  first-layer kinematic prior is preserved through distillation. Click any panel to enlarge.</figcaption>
+
+  <p class="dek">We illustrate the per-joint importance curves of RL and IL for all motions
+  separately, and the RL and IL curves <b>nearly overlap</b>. The heat maps tell the same story: switch
+  the explorer above to RL vs IL and the two matrices carry similar row structure, with the RL
+  weights simply running larger in magnitude.</p>
+
+  <p class="dek">The RL and IL networks are nevertheless not trivially connected in weight space,
+  and interpolating between them does not yield a functional policy. Therefore, the kinematic
+  prior is not specific to the RL optimization. It may instead reflect <b>common knowledge</b>
+  associated with the humanoid embodiment and the underlying motion kinematics.</p>
+
+  <details>
+    <summary>How the IL networks were distilled</summary>
+    <div class="body">
+      <p>A student MLP with identical depth, width, activations and parameter
+      naming is trained by mean-squared regression on a buffer of RL rollouts, with no environment
+      interaction and no reward. The student starts from the <em>same</em> initialization as its
+      teacher. Repeated independently for each teacher: 50 teacher–student pairs per motion.</p>
+      <div class="tw"><table>
+        <tr><th>Buffer</th><th class="n">N<sub>env</sub> × T × R</th><th class="n">Samples</th>
+            <th class="n">Obs dim</th></tr>
+        <tr><td>Walking</td><td class="n mono">1024 × 500 × 2</td><td class="n">1,024,000</td>
+            <td class="n">99</td></tr>
+        <tr><td>Dancing</td><td class="n mono">512 × 892 × 2</td><td class="n">913,408</td>
+            <td class="n">154</td></tr>
+        <tr><td>Spin kick</td><td class="n mono">512 × 232 × 8</td><td class="n">950,272</td>
+            <td class="n">154</td></tr>
+      </table></div>
+      <p class="tnote">N<sub>env</sub> is the number of parallel environments, T the episode
+      length in frames, and R the number of episodes collected per environment. The distilled
+      networks reach success rate and tracking error comparable to their RL teachers in
+      closed-loop simulation: functionally equivalent policies, reached by a different
+      optimization process.</p>
+      <div class="tw" style="margin-top:14px"><table>
+        <tr><th>Distillation setting</th><th>Value</th></tr>
+        <tr><td>Objective</td><td>MSE on the teacher's mean action</td></tr>
+        <tr><td>Optimizer</td><td>AdamW, weight decay 1 × 10⁻⁵</td></tr>
+        <tr><td>Learning rate</td><td>3 × 10⁻⁴ → 1 × 10⁻⁵ (cosine)</td></tr>
+        <tr><td>Batch size</td><td>4,096</td></tr>
+      </table></div>
+      <p class="tnote">Shared across all three motions.</p>
+    </div>
+  </details>
+
+  <h3 id="tsne">Subspace similarity across motions</h3>
+  <div class="split">
+    <div>
+      <p class="dek">The first layer contains 128 hidden nodes, each defined by a weight vector
+      over the input dimensions. All three motions share <code>joint_pos</code> (29) and
+      <code>joint_vel</code> (29), so every hidden node carries a 58-dimensional weight vector
+      defined on the same inputs. We analyze the subspace those 128 vectors span, and ask whether
+      the subspace itself is shared across motions. Subspace similarity is measured with linear
+      Centered Kernel Alignment. CKA runs from 0 (unrelated) to 1 (identical); as a reference point,
+      two independently drawn Kaiming-initialized weight matrices reach about 0.5.</p>
+
+      <p class="dek">Within a motion, different random seeds converge to nearly the same subspace.
+      Across motions the similarity drops but is still above the initialization reference. The first
+      layer is therefore neither motion-agnostic nor motion-specific. <b>A substantial shared
+      component is shaped by the G1's kinematics prior, and each motion introduces its own modulation
+      within that shared subspace.</b></p>
+    </div>
+    <div>
+      <figure class="card pad">
+        <img src="assets/fig/cka.webp" alt="Linear CKA within and across motions" loading="lazy">
+      </figure>
+      <figcaption>Linear CKA on the shared <code>joint_pos</code> and <code>joint_vel</code> inputs,
+      computed over the 128 hidden nodes' 58-dimensional weight vectors. The first three bars are
+      within-motion seed pairs; the last three are cross-motion pairs.</figcaption>
+    </div>
+  </div>
+
+  <h3 id="dr">Effect of domain randomization on weight space</h3>
+  <p class="dek">Domain randomization is a key component of sim-to-real reinforcement learning, but
+  its effect is typically evaluated only through policy performance. We instead ask how it changes
+  the weight space. For each motion we train two RL networks from the same initialization, one with
+  DR and one without, and compare their first-layer heat maps together with the element-wise
+  difference <span class="mono">W<sub>DR</sub> − W<sub>noDR</sub></span>.</p>
+
+  <p class="dek">The two networks look highly similar overall, yet their difference is substantial,
+  and the difference itself carries structure that resembles an RL-trained weight matrix rather than
+  noise. DR therefore reshapes the weights significantly while preserving their overall
+  distribution. The difference weights alone do not constitute a functional policy in simulation,
+  and linear interpolation between the DR and no-DR networks fails to produce functional
+  intermediate policies on any motion. <b>The effect of DR cannot be represented as a simple linear
+  displacement in weight space; it is a structured reorganization accumulated throughout RL
+  training, leaving the motion's overall weight-space structure intact.</b></p>
+
+  <div class="ctrls">
+    <div class="grp"><label>Motion</label><div class="seg" id="segDrMotion">
+      <button data-v="walking" aria-pressed="true">Walking</button>
+      <button data-v="dancing" aria-pressed="false">Dancing</button>
+      <button data-v="spinkick" aria-pressed="false">Spin kick</button>
+    </div></div>
+    <span class="hintbar">3 views · &larr; &rarr; to step through motions</span>
+  </div>
+
+  <div class="expl">
+    <figure class="stage"><img id="drImg" src="assets/fig/w_walking_L1_dr.webp" alt=""></figure>
+  </div>
+  <figcaption>First-layer weight heat maps for <span id="drCapMotion">walking</span>, from RL
+  networks trained from the same initialization: (a) with DR, (b) without DR, and (c) their
+  element-wise difference.</figcaption>
+
+  <details>
+    <summary>What exactly is randomized in the DR runs</summary>
+    <div class="body">
+      <div class="tw"><table>
+        <tr><th>Term</th><th>Randomised quantity</th><th>Walking</th><th>Dancing</th><th>Sampling</th></tr>
+        <tr><td>Foot friction</td><td>Sliding friction coefficient of the foot geoms</td>
+            <td class="mono">U(0.3, 1.2)</td><td class="mono">U(0.3, 1.2)</td><td>per env</td></tr>
+        <tr><td>Torso CoM offset</td><td>Centre-of-mass position of the torso link, per axis</td>
+            <td class="mono">±(2.5, 2.5, 3.0) cm</td><td class="mono">±(2.5, 5.0, 5.0) cm</td>
+            <td>per env, per axis</td></tr>
+        <tr><td>Encoder bias</td><td>Constant offset on the measured joint positions</td>
+            <td class="mono">±0.015 rad</td><td class="mono">±0.010 rad</td><td>per env, per joint</td></tr>
+      </table></div>
+    </div>
+  </details>
+
+</section>
+
+<hr class="rule">
+
+<section id="bibtex">
+  <h2>BibTeX</h2>
+<pre>@inproceedings{anonymous2027humanoid,
+  title     = {Towards Understanding Humanoid Control through Network Weight Analysis},
+  author    = {Anonymous},
+  booktitle = {Under review},
+  year      = {2027}
+}</pre>
+</section>
+
+<footer>
+  Anonymised project page for double-anonymous review.
+  Page layout adapted from the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template">Academic Project Page Template</a>, CC BY-SA 4.0.
+</footer>
+
+<div class="tip" id="tip"></div>
+
+<script>
+/* ─────────────────────────────────────────────────────────
+   1 · Weight space explorer
+   ───────────────────────────────────────────────────────── */
+const state = {motion:'walking', scope:'L1', cmp:'rl'};
+const MOTIONS = ['walking','dancing','spinkick'];
+const NICE = {walking:'Walking', dancing:'Dancing', spinkick:'Spin kick'};
+
+const COPY = {
+  'L1|rl': {
+    fig: m => m==='walking' ? 'Fig. 4a' : 'Fig. 9',
+    title:'First-layer weights, RL',
+    body:`Rows are input dimensions grouped by semantic block, columns are the 128 hidden nodes.
+      Whole rows go dark together: <code>joint_pos</code> and the gravity/angular-velocity
+      block carry systematically larger magnitudes than <code>last_action</code> or
+      <code>command</code>. The two zoom-ins split the joint rows into legs, waist and arms.`
+  },
+  'L1|rlil': {
+    fig: m => m==='walking' ? 'Fig. 5' : 'Fig. 11',
+    title:'First layer, RL vs IL',
+    body:`Same motion, same architecture, same inputs, same initialization, and a functionally
+      equivalent policy reached by an entirely different optimization. The kinematic prior
+      survives distillation: both matrices carry the same row structure, with the RL weights
+      running larger in magnitude. The two are still not trivially connected, and interpolating
+      between a teacher and its own student fails to produce a working policy.`
+  },
+  'L1|dr': {
+    fig: () => 'Fig. 6',
+    title:'Effect of domain randomization',
+    body:`Two RL networks from the same initialization, with and without domain randomization,
+      plus their element-wise difference. The difference is not noise. It carries the same
+      row structure as the trained weights themselves, so DR reorganises the weights rather
+      than displacing them.`
+  },
+  'L3|rl': {
+    fig: () => 'Fig. 10',
+    title:'All three layers, RL',
+    body:`Layer 1 (input → 128), layer 2 (128 → 128), layer 3 (128 → 29 actions). The structure is
+      a first-layer phenomenon: layers 2 and 3 look close to unstructured at this scale, which is
+      why the analysis focuses on layer 1.`
+  },
+  'L3|rlil': {
+    fig: () => 'Fig. 12',
+    title:'All three layers, RL vs IL',
+    body:`Both networks compute the same behavior, so whatever separates them is a property of
+      the optimization path rather than of the function. Layer 1 carries the shared kinematic
+      structure; layers 2 and 3 look close to unstructured at this scale in both.`
+  }
+};
+
+const explImg = document.getElementById('explImg');
+function keyOf(){ return state.scope+'|'+state.cmp; }
+const VECTOR = new Set(['w_walking_L3_rl','w_dancing_L3_rl','w_spinkick_L3_rl',
+                        'w_walking_L3_rlil','w_dancing_L3_rlil','w_spinkick_L3_rlil']);
+/* Every runtime-built figure path goes through here, so the single-file preview
+   build can swap in inlined data URIs by rewriting one function. */
+function figURL(name, ext){ return `assets/fig/${name}.${ext}`; }
+function assetOf(){
+  const base = `w_${state.motion}_${state.scope}_${state.cmp}`;
+  return figURL(base, VECTOR.has(base) ? 'svg' : 'webp');
+}
+function renderExpl(){
+  // the DR comparison is a first-layer figure, for every motion
+  const drBtn = document.querySelector('#segCmp button[data-v="dr"]');
+  const drOk = state.scope==='L1';
+  drBtn.disabled = !drOk;
+  drBtn.style.opacity = drOk ? '' : '.38';
+  drBtn.style.cursor = drOk ? 'pointer' : 'not-allowed';
+  if(!drOk && state.cmp==='dr'){ state.cmp='rl'; syncSeg('segCmp','rl'); }
+
+  const c = COPY[keyOf()];
+  explImg.src = assetOf();
+  explImg.alt = `${c.title}, ${NICE[state.motion]}`;
+  document.getElementById('roTitle').textContent = `${NICE[state.motion]} · ${c.title}`;
+  document.getElementById('roBody').innerHTML = c.body;
+}
+function syncSeg(id,v){
+  document.querySelectorAll(`#${id} button`).forEach(b=>
+    b.setAttribute('aria-pressed', String(b.dataset.v===v)));
+}
+function wire(id,key,after){
+  document.getElementById(id).addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b||b.disabled) return;
+    state[key]=b.dataset.v; syncSeg(id,b.dataset.v); (after||renderExpl)();
+  });
+}
+wire('segMotion','motion'); wire('segScope','scope'); wire('segCmp','cmp');
+/* Click-to-zoom. Raster figures stop at their own pixel grid; the vector
+   figures have no such ceiling, so they open at a fixed multiple instead.
+   The browser only rasterises the tiles actually on screen, so the factor
+   costs nothing to raise. */
+const VECTOR_ZOOM = 3;
+function attachZoom(stage, img, factor){
+  stage.insertAdjacentHTML('beforeend', '<span class="zoomtip"></span>');
+  const tip = stage.querySelector('.zoomtip');
+  const fitWidth = () => {
+    const cs = getComputedStyle(stage);
+    return stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  };
+  const isVector = () => /\.svg(\?|$)/.test(img.getAttribute('src') || '') ||
+                         (img.getAttribute('src') || '').startsWith('data:image/svg');
+  function reset(){
+    stage.classList.remove('zoom');
+    img.style.width = '';
+    tip.textContent = isVector() ? 'Click to inspect · vector, sharp at any zoom'
+                                 : 'Click to inspect at full resolution';
+  }
+  stage.addEventListener('click', () => {
+    if(stage.classList.contains('zoom')){ reset(); return; }
+    const fit = fitWidth();
+    const w = factor      ? Math.round(fit * factor)
+            : isVector()  ? Math.round(fit * VECTOR_ZOOM)
+            : img.naturalWidth;
+    if(!w) return;
+    stage.classList.add('zoom');
+    img.style.width = w + 'px';
+  });
+  img.addEventListener('load', reset);
+  reset();
+}
+attachZoom(explImg.closest('.stage'), explImg);
+renderExpl();
+
+/* ─────────────────────────────────────────────────────────
+   2 · Domain randomization switcher, and the RL vs IL panels
+   ───────────────────────────────────────────────────────── */
+const SWITCHERS = [];
+const stepMotion = (m, d) => MOTIONS[(MOTIONS.indexOf(m) + d + MOTIONS.length) % MOTIONS.length];
+
+function motionSwitcher({seg, img, cap, head, name, alt}){
+  const el = document.getElementById(img), capEl = document.getElementById(cap);
+  let motion = 'walking';
+  function render(){
+    el.src = figURL(name(motion), 'webp');
+    el.alt = alt(motion);
+    capEl.textContent = NICE[motion].toLowerCase();
+  }
+  document.getElementById(seg).addEventListener('click', e => {
+    const b = e.target.closest('button'); if(!b) return;
+    motion = b.dataset.v; syncSeg(seg, motion); render();
+  });
+  attachZoom(el.closest('.stage'), el);
+  render();
+  SWITCHERS.push({ head, block: el.closest('.expl'),
+    step(d){ motion = stepMotion(motion, d); syncSeg(seg, motion); render(); } });
+}
+
+motionSwitcher({
+  seg:'segDrMotion', img:'drImg', cap:'drCapMotion', head:'dr',
+  name: m => `w_${m}_L1_dr`,
+  alt:  m => `${NICE[m]}: first-layer weights with DR, without DR, and their difference` });
+
+/* the RL vs IL panels sit three across, so each is its own zoomable stage */
+document.querySelectorAll('.trio .stage').forEach(st => attachZoom(st, st.querySelector('img'), 1.5));
+
+/* Arrow keys step through motions in whichever figure block is on screen. */
+function nearView(headId, block){
+  const h = document.getElementById(headId).getBoundingClientRect();
+  const b = block.getBoundingClientRect();
+  return b.bottom > 120 && h.top < window.innerHeight - 120;
+}
+document.addEventListener('keydown', e=>{
+  if(e.key!=='ArrowLeft' && e.key!=='ArrowRight') return;
+  const d = e.key==='ArrowRight' ? 1 : -1;
+  if(nearView('explorer', explImg.closest('.expl'))){
+    state.motion = stepMotion(state.motion, d);
+    syncSeg('segMotion', state.motion); renderExpl();
+    return;
+  }
+  const hit = SWITCHERS.find(s => nearView(s.head, s.block));
+  if(hit) hit.step(d);
+});
+
+/* ─────────────────────────────────────────────────────────
+   3 · Joint table (Table XV)
+   ───────────────────────────────────────────────────────── */
+const JOINTS = [
+  ['legs','left','hip_pitch',-2.53,2.88],['legs','left','hip_roll',-0.52,2.97],
+  ['legs','left','hip_yaw',-2.76,2.76],['legs','left','knee',-0.09,2.88],
+  ['legs','left','ankle_pitch',-0.87,0.52],['legs','left','ankle_roll',-0.26,0.26],
+  ['legs','right','hip_pitch',-2.53,2.88],['legs','right','hip_roll',-2.97,0.52],
+  ['legs','right','hip_yaw',-2.76,2.76],['legs','right','knee',-0.09,2.88],
+  ['legs','right','ankle_pitch',-0.87,0.52],['legs','right','ankle_roll',-0.26,0.26],
+  ['waist','—','yaw',-2.62,2.62],['waist','—','roll',-0.52,0.52],['waist','—','pitch',-0.52,0.52],
+  ['arms','left','shoulder_pitch',-3.09,2.67],['arms','left','shoulder_roll',-1.59,2.25],
+  ['arms','left','shoulder_yaw',-2.62,2.62],['arms','left','elbow',-1.05,2.09],
+  ['arms','left','wrist_roll',-1.97,1.97],['arms','left','wrist_pitch',-1.61,1.61],
+  ['arms','left','wrist_yaw',-1.61,1.61],
+  ['arms','right','shoulder_pitch',-3.09,2.67],['arms','right','shoulder_roll',-2.25,1.59],
+  ['arms','right','shoulder_yaw',-2.62,2.62],['arms','right','elbow',-1.05,2.09],
+  ['arms','right','wrist_roll',-1.97,1.97],['arms','right','wrist_pitch',-1.61,1.61],
+  ['arms','right','wrist_yaw',-1.61,1.61]
+];
+const jt = document.getElementById('joints');
+jt.innerHTML = '<tr><th class="n">k</th><th>Region</th><th>Side</th><th>Joint</th><th class="n">Range [rad]</th></tr>'
+  + JOINTS.map((j,i)=>{
+      const hi = (i===0||i===6||j[0]==='waist');
+      return `<tr${hi?' class="hi"':''}><td class="n">${i}</td><td>${j[0]}</td><td>${j[2]&&j[1]||'—'}</td>`
+           + `<td><code>${j[2]}</code></td><td class="n">[${j[3].toFixed(2)}, ${j[4].toFixed(2)}]</td></tr>`;
+    }).join('');
+
+/* ─────────────────────────────────────────────────────────
+   4 · Generalisation small multiples (Table III)
+   ───────────────────────────────────────────────────────── */
+const GEN = {
+  walking:  {label:'Walking',   sig:[0,0.01,0.05,0.10], succ:[0.999,0.999,0.998,0.959],
+             mS:0.110, mNoise:0.914, dS:0.110, dDiff:0.993},
+  dancing:  {label:'Dancing',   sig:[0,0.01,0.05,0.10], succ:[0.998,0.997,0.990,0.629],
+             mS:0.078, mNoise:0.865, dS:0.078, dDiff:0.941},
+  spinkick: {label:'Spin kick', sig:[0,0.01,0.05,0.10], succ:[0.997,0.997,0.984,0.650],
+             mS:0.090, mNoise:0.783, dS:0.090, dDiff:0.943}
+};
+const CSS = getComputedStyle(document.documentElement);
+const S1 = CSS.getPropertyValue('--s1').trim(), S2 = CSS.getPropertyValue('--s2').trim();
+const GRID = CSS.getPropertyValue('--grid').trim(), AXIS = CSS.getPropertyValue('--axis').trim();
+const MUTED = CSS.getPropertyValue('--muted').trim(), INK2 = CSS.getPropertyValue('--ink2').trim();
+
+const W=330,H=210,ML=40,MR=16,MT=12,MB=32, YMIN=0.55, XMAX=0.12;
+const X = s => ML + s/XMAX*(W-ML-MR);
+const Y = v => MT + (1-(v-YMIN)/(1-YMIN))*(H-MT-MB);
+
+function panel(key){
+  const d = GEN[key];
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${d.label}: success rate against noise level">`;
+  // gridlines + y ticks
+  for(let v=0.6; v<=1.0001; v+=0.1){ // ticks start at 0.6; scale floor sits a little below
+    s += `<line x1="${ML}" y1="${Y(v).toFixed(1)}" x2="${W-MR}" y2="${Y(v).toFixed(1)}" stroke="${GRID}" stroke-width="1"/>`;
+    s += `<text x="${ML-7}" y="${(Y(v)+4).toFixed(1)}" font-size="10" fill="${MUTED}" text-anchor="end">${v.toFixed(1)}</text>`;
+  }
+  // x axis
+  s += `<line x1="${ML}" y1="${H-MB}" x2="${W-MR}" y2="${H-MB}" stroke="${AXIS}" stroke-width="1"/>`;
+  [0,0.04,0.08,0.12].forEach(t=>{
+    s += `<text x="${X(t).toFixed(1)}" y="${H-MB+15}" font-size="10" fill="${MUTED}" text-anchor="middle">${t.toFixed(2)}</text>`;
+  });
+  s += `<text x="${((ML+W-MR)/2).toFixed(1)}" y="${H-4}" font-size="10.5" fill="${MUTED}" text-anchor="middle">noise level σ (distance from training set)</text>`;
+  // matched-distance guide
+  s += `<line x1="${X(d.mS).toFixed(1)}" y1="${MT}" x2="${X(d.mS).toFixed(1)}" y2="${H-MB}" stroke="${AXIS}" stroke-width="1" stroke-dasharray="3 3"/>`;
+  // noise curve
+  const pts = d.sig.map((sg,i)=>[X(sg),Y(d.succ[i])]).concat([[X(d.mS),Y(d.mNoise)]])
+                   .sort((a,b)=>a[0]-b[0]);
+  s += `<polyline points="${pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}" fill="none" stroke="${S2}" stroke-width="2" stroke-linejoin="round"/>`;
+  // delta connector
+  s += `<line x1="${X(d.mS).toFixed(1)}" y1="${Y(d.mNoise).toFixed(1)}" x2="${X(d.dS).toFixed(1)}" y2="${Y(d.dDiff).toFixed(1)}" stroke="${S1}" stroke-width="1.5" stroke-dasharray="2 2" opacity=".55"/>`;
+  // noise points
+  d.sig.forEach((sg,i)=>{
+    s += `<circle class="pt" data-t="σ=${sg.toFixed(2)} · noise · succ ${d.succ[i].toFixed(3)}" cx="${X(sg).toFixed(1)}" cy="${Y(d.succ[i]).toFixed(1)}" r="4" fill="${S2}" stroke="var(--surface)" stroke-width="2"/>`;
+  });
+  // matched pair, drawn bigger
+  s += `<circle class="pt" data-t="matched σ=${d.mS.toFixed(3)} · noise · succ ${d.mNoise.toFixed(3)}" cx="${X(d.mS).toFixed(1)}" cy="${Y(d.mNoise).toFixed(1)}" r="6" fill="${S2}" stroke="var(--surface)" stroke-width="2"/>`;
+  s += `<circle class="pt" data-t="matched σ=${d.dS.toFixed(3)} · diffusion · succ ${d.dDiff.toFixed(3)}" cx="${X(d.dS).toFixed(1)}" cy="${Y(d.dDiff).toFixed(1)}" r="6" fill="${S1}" stroke="var(--surface)" stroke-width="2"/>`;
+  // direct labels on the matched pair
+  const halo = 'paint-order="stroke" stroke="var(--surface)" stroke-width="3.5" stroke-linejoin="round"';
+  const anchor = X(d.dS) > W - 62 ? 'end' : 'middle';
+  const lx = anchor === 'end' ? X(d.dS) + 7 : X(d.dS);
+  // if the point sits too close to the top, hang its label below instead of clipping it
+  const dLabelY = (Y(d.dDiff) - 12 >= MT + 4) ? Y(d.dDiff) - 12 : Y(d.dDiff) + 19;
+  s += `<text ${halo} x="${lx.toFixed(1)}" y="${dLabelY.toFixed(1)}" font-size="11" font-weight="640" fill="${S1}" text-anchor="${anchor}">${d.dDiff.toFixed(3)}</text>`;
+  s += `<text ${halo} x="${lx.toFixed(1)}" y="${(Y(d.mNoise)+19).toFixed(1)}" font-size="11" font-weight="640" fill="${S2}" text-anchor="${anchor}">${d.mNoise.toFixed(3)}</text>`;
+  s += `</svg>`;
+  return `<div class="panel"><p class="cap">${d.label}</p>
+    <p class="sub">both points sit σ = ${d.mS.toFixed(3)} from the training set;
+    diffusion scores ${(d.dDiff-d.mNoise).toFixed(3)} higher</p>${s}</div>`;
+}
+document.getElementById('panels').innerHTML = Object.keys(GEN).map(panel).join('');
+
+/* tooltips */
+const tip = document.getElementById('tip');
+document.getElementById('panels').addEventListener('mouseover',e=>{
+  const c = e.target.closest('.pt'); if(!c) return;
+  tip.textContent = c.dataset.t; tip.style.opacity = 1;
+  const r = c.getBoundingClientRect();
+  tip.style.left = Math.min(window.innerWidth-tip.offsetWidth-10, r.left+12)+'px';
+  tip.style.top  = (r.top-tip.offsetHeight-8)+'px';
+});
+document.getElementById('panels').addEventListener('mouseout',e=>{
+  if(e.target.closest('.pt')) tip.style.opacity = 0;
+});
+
+/* table view */
+const tv = document.getElementById('tblview'), tb = document.getElementById('tblbtn');
+tv.innerHTML = '<div class="tw"><table><tr><th>Motion</th><th class="n">σ = 0</th><th class="n">0.01</th>'
+  + '<th class="n">0.05</th><th class="n">0.10</th><th class="n">matched σ</th>'
+  + '<th class="n">noise @ matched</th><th class="n">diffusion @ matched</th></tr>'
+  + Object.values(GEN).map(d=>`<tr><td>${d.label}</td>`
+      + d.succ.map(v=>`<td class="n">${v.toFixed(3)}</td>`).join('')
+      + `<td class="n">${d.mS.toFixed(3)}</td><td class="n">${d.mNoise.toFixed(3)}</td>`
+      + `<td class="n" style="font-weight:640;color:var(--ink)">${d.dDiff.toFixed(3)}</td></tr>`).join('')
+  + '</table></div>';
+tb.addEventListener('click',()=>{
+  const on = tv.hidden; tv.hidden = !on; tb.textContent = on ? 'Hide table' : 'Show table';
+});
+
+/* ─────────────────────────────────────────────────────────
+   5 · Video
+   ───────────────────────────────────────────────────────── */
+const player = document.getElementById('player');
+const teaser = document.getElementById('teaser');
+document.getElementById('playbtn').addEventListener('click', () => {
+  const p = teaser.play();
+  if (p) p.catch(()=>{});          // if it can't start, leave the overlay up
+});
+teaser.addEventListener('play',  () => player.classList.add('playing'));
+teaser.addEventListener('ended', () => player.classList.remove('playing'));
+
+/* the short loops cost nothing until you scroll to them */
+const lazy = document.querySelectorAll('video[data-lazy]');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    const v = e.target;
+    if (e.isIntersecting) { const p = v.play(); if (p) p.catch(()=>{}); }
+    else v.pause();
+  }), {threshold:0.25});
+  lazy.forEach(v => io.observe(v));
+} else {
+  lazy.forEach(v => { v.setAttribute('autoplay',''); v.load(); });
+}
+</script>
+</body>
+</html>
