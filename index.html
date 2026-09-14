@@ -66,7 +66,7 @@ h3{font-size:16px;margin:26px 0 8px;font-weight:620;text-align:left}
 #analysis h3:not(:first-of-type)::before{content:"";display:block;width:48px;height:2px;
   background:#c3c2b7;margin:0 0 22px}
 p{font-size:16px;color:var(--ink2);margin:0 0 17px;max-width:70ch}
-.abs{font-size:16px;color:var(--ink2);max-width:74ch;margin:0 auto;text-align:center}
+.abs{font-size:16px;color:var(--ink2);max-width:calc(74ch + 20px);margin:0 auto;text-align:center}
 hr{border:0;border-top:1px solid var(--grid);margin:0;max-width:calc(var(--wide) - 2*var(--pad))}
 .rule{max-width:calc(var(--wide) - 2*var(--pad));margin:0 auto}
 figure{margin:0}
@@ -147,10 +147,24 @@ tr.hi td{font-weight:640;color:var(--ink)}
   box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .hintbar{font-size:12.5px;color:var(--muted);margin-left:auto;align-self:center}
 
+/* Collapsible prose. What slides out is ordinary page text, not a card: same
+   size, colour and measure as everything else, it just grows in place. */
+.foldline{margin:0 0 17px}
+.foldtoggle,.foldcue{font:inherit;color:var(--ink2);text-decoration:underline;
+  text-underline-offset:3px;text-decoration-thickness:1px;text-decoration-color:#c3c2b7}
+.foldtoggle{border:0;background:none;padding:0;cursor:pointer;transition:color .12s}
+.foldtoggle:hover{color:var(--ink);text-decoration-color:currentColor}
+.foldtoggle:focus-visible{outline:2px solid var(--s1);outline-offset:3px;border-radius:2px}
+.foldbody{display:grid;grid-template-rows:0fr;opacity:0;
+  transition:grid-template-rows .34s cubic-bezier(.4,0,.2,1),opacity .22s ease}
+.foldbody>div{overflow:hidden;min-height:0}
+.fold.open>.foldbody{grid-template-rows:1fr;opacity:1}
+@media(prefers-reduced-motion:reduce){.foldbody{transition:none}}
+
 /* ── explorer ──────────────────────────────────────── */
 .expl{display:block}
 .expl .stage{min-height:260px}
-.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:22px;align-items:start}
+.split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:22px;align-items:start}
 @media(max-width:860px){.split{grid-template-columns:1fr}}
 .stage{background:var(--surface);border:1px solid var(--ring);border-radius:12px;
   padding:14px;display:flex;align-items:center;justify-content:center;
@@ -166,6 +180,27 @@ tr.hi td{font-weight:640;color:var(--ink)}
   opacity:0;transition:opacity .15s}
 .stage:hover .zoomtip{opacity:1}
 .stage.zoom .zoomtip{display:none}
+/* The kinematic prior plot is wide and sparse; 90% reads better than full bleed. */
+.prior-fig img{width:90%;margin-inline:auto}
+
+/* ── Flat figures ─────────────────────────────────────
+   Figures in Method, Weight Space Analysis and the t-SNE row sit directly on
+   the page instead of inside cards. The video row keeps its cards: those are
+   dark photographic posters and need the frame. */
+#method .card,
+#analysis .card,
+#analysis .stage{background:none;border:0;border-radius:0;padding:0}
+#analysis .expl .stage{min-height:0}
+#analysis .trio .stage{padding:0}
+#method figcaption,
+#analysis figcaption{margin-top:13px}
+/* the t-SNE trio too; the video row (#video) keeps its cards, the posters need them */
+#results .vgrid:not(#video) .card{background:none;border:0;border-radius:0;
+  overflow:visible}
+#results .vgrid:not(#video) .lbl{border-top:0;padding:9px 0 0;
+  justify-content:center;gap:8px}
+#results .vgrid:not(#video) .lbl span::before{content:"· "}
+
 .readout{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:16px;
   margin-top:14px}
 .readout h4{margin:0 0 4px;font-size:15px;font-weight:620}
@@ -278,7 +313,7 @@ footer a{color:var(--ink2)}
 <section id="method">
   <h2 class="mid">Method</h2>
   <div class="lede">
-    <p><b>What we generate? The network itself.</b> Diffusion models in robotics normally sample
+    <p><b>What we generate? The network weight itself.</b> Diffusion models in robotics normally sample
     what the robot should <em>do</em>: an action chunk, a trajectory, a plan. Here the generative
     target moves one level up: the model samples the <b>weights and biases of a humanoid control
     policy</b>. One sample from the diffusion model is a complete controller, a more fundamental
@@ -472,6 +507,10 @@ footer a{color:var(--ink2)}
   is applied in the RL training used for this analysis, reducing confounding effects caused by
   differences in input scale.</p>
 
+  <p class="dek">To give a better reading experience, the explanatory text under each analysis
+  below is hidden by default. If you would like to know how an analysis was carried out, just
+  click <span class="foldcue">See more</span>.</p>
+
   <h3 id="explorer">Weight space explorer</h3>
   <p class="dek">We offer comprehensive visualization of the first layer or all three, RL or IL,
   with or without domain randomization, one motion or another. Feel free to explore on your own and
@@ -512,6 +551,10 @@ footer a{color:var(--ink2)}
 
 
   <h3 id="prior">Kinematic prior in the first-layer</h3>
+
+  <div class="fold">
+    <p class="foldline"><button type="button" class="foldtoggle" aria-expanded="false">See more</button></p>
+    <div class="foldbody"><div>
   <p class="dek">For those RL trained networks, we average the absolute first-layer weight over the
   128 hidden nodes and 50 seeds to obtain a per-joint importance profile. The profile barely moves
   between walking, dancing and spin kick. The network spends its first layer describing the
@@ -524,8 +567,10 @@ footer a{color:var(--ink2)}
   motion-specific knowledge. This interpretation aligns with findings in human motor control and
   biomechanics showing that the trunk primarily provides postural stability, while the limbs are
   responsible for mobility and motion execution.</p>
+    </div></div>
+  </div>
 
-  <figure class="card pad">
+  <figure class="card pad prior-fig">
     <img src="assets/fig/jointwise.webp" alt="Joint-wise normalised weight magnitude across motions" loading="lazy">
   </figure>
   <figcaption>Normalized per-joint average |W| for the <code>joint_pos</code> (top) and
@@ -542,16 +587,28 @@ footer a{color:var(--ink2)}
     </div>
   </details>
 
-  <h3 id="rlil">RL and IL weight comparison</h3>
+  <h3 id="rlil">Kinematic prior in both RL and IL weight</h3>
+
+  <div class="fold">
+    <p class="foldline"><button type="button" class="foldtoggle" aria-expanded="false">See more</button></p>
+    <div class="foldbody"><div>
   <p class="dek">The emergence of a kinematic prior raises a natural question: is that prior
   intrinsic to the learned motion, or does it depend on how the network is trained? We therefore
   analyze networks trained by <b>imitation learning (IL)</b> performing the same motions.</p>
-
   <p class="dek">For each motion we distill an IL network from a pre-trained RL network. We roll
   out the RL network in parallel environments to collect a buffer and distill the IL network by
   offline regression, achieving a <b>functionally equivalent</b> network obtained through an
   entirely different optimization process.</p>
-
+  <p class="dek">We illustrate the per-joint importance curves of RL and IL for all motions
+  separately, and the RL and IL curves <b>nearly overlap</b>. The heat maps tell the same story: switch
+  the explorer above to RL vs IL and the two matrices carry similar row structure, with the RL
+  weights simply running larger in magnitude.</p>
+  <p class="dek">The RL and IL networks are nevertheless not trivially connected in weight space,
+  and interpolating between them does not yield a functional policy. Therefore, the kinematic
+  prior is not specific to the RL optimization. It may instead reflect <b>common knowledge</b>
+  associated with the humanoid embodiment and the underlying motion kinematics.</p>
+    </div></div>
+  </div>
 
   <div class="trio">
     <figure class="stage">
@@ -570,16 +627,6 @@ footer a{color:var(--ink2)}
   <figcaption>Normalized per-joint average |W| by mean for each motion, averaged over 50 RL teachers and
   their 50 distilled IL students. The solid and dashed curves largely overlap, indicating the
   first-layer kinematic prior is preserved through distillation. Click any panel to enlarge.</figcaption>
-
-  <p class="dek">We illustrate the per-joint importance curves of RL and IL for all motions
-  separately, and the RL and IL curves <b>nearly overlap</b>. The heat maps tell the same story: switch
-  the explorer above to RL vs IL and the two matrices carry similar row structure, with the RL
-  weights simply running larger in magnitude.</p>
-
-  <p class="dek">The RL and IL networks are nevertheless not trivially connected in weight space,
-  and interpolating between them does not yield a functional policy. Therefore, the kinematic
-  prior is not specific to the RL optimization. It may instead reflect <b>common knowledge</b>
-  associated with the humanoid embodiment and the underlying motion kinematics.</p>
 
   <details>
     <summary>How the IL networks were distilled</summary>
@@ -617,6 +664,16 @@ footer a{color:var(--ink2)}
   <h3 id="tsne">Subspace similarity across motions</h3>
   <div class="split">
     <div>
+      <figure class="card pad">
+        <img src="assets/fig/cka.webp" alt="Linear CKA within and across motions" loading="lazy">
+      </figure>
+      <figcaption>Linear CKA on the shared <code>joint_pos</code> and <code>joint_vel</code> inputs,
+      computed over the 128 hidden nodes' 58-dimensional weight vectors. The first three bars are
+      within-motion seed pairs; the last three are cross-motion pairs.</figcaption>
+    </div>
+    <div class="fold">
+      <p class="foldline"><button type="button" class="foldtoggle" aria-expanded="false">See more</button></p>
+      <div class="foldbody"><div>
       <p class="dek">The first layer contains 128 hidden nodes, each defined by a weight vector
       over the input dimensions. All three motions share <code>joint_pos</code> (29) and
       <code>joint_vel</code> (29), so every hidden node carries a 58-dimensional weight vector
@@ -630,24 +687,20 @@ footer a{color:var(--ink2)}
       layer is therefore neither motion-agnostic nor motion-specific. <b>A substantial shared
       component is shaped by the G1's kinematics prior, and each motion introduces its own modulation
       within that shared subspace.</b></p>
-    </div>
-    <div>
-      <figure class="card pad">
-        <img src="assets/fig/cka.webp" alt="Linear CKA within and across motions" loading="lazy">
-      </figure>
-      <figcaption>Linear CKA on the shared <code>joint_pos</code> and <code>joint_vel</code> inputs,
-      computed over the 128 hidden nodes' 58-dimensional weight vectors. The first three bars are
-      within-motion seed pairs; the last three are cross-motion pairs.</figcaption>
+      </div></div>
     </div>
   </div>
 
   <h3 id="dr">Effect of domain randomization on weight space</h3>
+
+  <div class="fold">
+    <p class="foldline"><button type="button" class="foldtoggle" aria-expanded="false">See more</button></p>
+    <div class="foldbody"><div>
   <p class="dek">Domain randomization is a key component of sim-to-real reinforcement learning, but
   its effect is typically evaluated only through policy performance. We instead ask how it changes
   the weight space. For each motion we train two RL networks from the same initialization, one with
   DR and one without, and compare their first-layer heat maps together with the element-wise
-  difference <span class="mono">W<sub>DR</sub> − W<sub>noDR</sub></span>.</p>
-
+  difference <span class="mono">W<sub>DR</sub> − W<sub>withoutDR</sub></span>.</p>
   <p class="dek">The two networks look highly similar overall, yet their difference is substantial,
   and the difference itself carries structure that resembles an RL-trained weight matrix rather than
   noise. DR therefore reshapes the weights significantly while preserving their overall
@@ -656,6 +709,8 @@ footer a{color:var(--ink2)}
   intermediate policies on any motion. <b>The effect of DR cannot be represented as a simple linear
   displacement in weight space; it is a structured reorganization accumulated throughout RL
   training, leaving the motion's overall weight-space structure intact.</b></p>
+    </div></div>
+  </div>
 
   <div class="ctrls">
     <div class="grp"><label>Motion</label><div class="seg" id="segDrMotion">
@@ -864,6 +919,18 @@ motionSwitcher({
 
 /* the RL vs IL panels sit three across, so each is its own zoomable stage */
 document.querySelectorAll('.trio .stage').forEach(st => attachZoom(st, st.querySelector('img'), 1.5));
+
+/* ─────────────────────────────────────────────────────────
+   2b · Collapsible prose
+   ───────────────────────────────────────────────────────── */
+document.querySelectorAll('.fold').forEach(fold => {
+  const toggle = fold.querySelector('.foldtoggle');
+  toggle.addEventListener('click', () => {
+    const open = fold.classList.toggle('open');
+    toggle.textContent = open ? 'Hide' : 'See more';
+    toggle.setAttribute('aria-expanded', String(open));
+  });
+});
 
 /* Arrow keys step through motions in whichever figure block is on screen. */
 function nearView(headId, block){
