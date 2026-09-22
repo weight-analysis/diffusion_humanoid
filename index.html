@@ -72,7 +72,10 @@ h3{font-size:16px;margin:26px 0 8px;font-weight:620;text-align:left}
 #analysis h3:not(:first-of-type)::before{content:"";display:block;width:48px;height:2px;
   background:#c3c2b7;margin:0 0 22px}
 p{font-size:16px;color:var(--ink2);margin:0 0 17px;max-width:70ch}
-.abs{font-size:16px;color:var(--ink2);max-width:calc(74ch + 20px);margin:0 auto;text-align:center}
+.abs{font-size:16px;color:var(--ink2);max-width:calc(74ch + 60px);margin:0 auto;text-align:center;
+  text-wrap:pretty}
+/* Keep the closing words together so the abstract never ends on a lone word. */
+.nobr{white-space:nowrap}
 hr{border:0;border-top:1px solid var(--grid);margin:0;max-width:calc(var(--wide) - 2*var(--pad))}
 .rule{max-width:calc(var(--wide) - 2*var(--pad));margin:0 auto}
 figure{margin:0}
@@ -317,8 +320,7 @@ footer a{color:var(--ink2)}
   Learning (RL) and Imitation Learning (IL) training, suggesting that it is not specific to a
   particular optimization process but may instead reflect common knowledge associated with humanoid
   embodiment. Together, these results demonstrate the feasibility of generative modeling in humanoid
-  network weight space, while providing initial insights into the information encoded by their
-  learned weights.</p>
+  network weight space, while providing initial insights into the information encoded by <span class="nobr">their learned weights.</span></p>
 </section>
 
 <hr class="rule">
